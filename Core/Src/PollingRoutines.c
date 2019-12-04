@@ -20,8 +20,12 @@ extern RING_BUFF_INFO usbRxRingBuffPtr;
 uint8_t USB_TX_Buffer[USBD_CUSTOMHID_OUTREPORT_BUF_SIZE]; // To send usb data to PC
 
 
-uint8_t uartHelloMsg[] = {"Hello From STM32\n\r"};
-uint8_t uartButtonPressedMsg[] = {"User Button is PRESSED!\n\r"};
+const char* Version = "v1.0.1";
+const char* Hardware = "STM32F407-Discovery";
+
+
+char uartHelloMsg[] = {"Hello From STM32\n\r"};
+char uartButtonPressedMsg[] = {"User Button is PRESSED!\n\r"};
 
 
 /*
@@ -69,8 +73,48 @@ void ParseUsbRec(void) {
 		case COMMAND_CAN_MODE:
 
 			break;
+		case COMMAND_INFO:
+			// todo - report fw version, hardware type
+			SendHardwareInfo();
+			SendVersionInfo();
+			Send_CAN_BTR(&hcan1);
+			break;
 		}
 	}
+}
+
+void SendHardwareInfo(void) {
+	uint8_t data[USBD_CUSTOMHID_OUTREPORT_BUF_SIZE] = {0};
+	uint8_t i = 0;
+	data[0] = COMMAND_HARDWARE;
+	while( Hardware[i] != '\0') {
+		data[i + 1] = (uint8_t) Hardware[i];
+		i++;
+	}
+	AddUsbTxBuffer(data);
+}
+
+void SendVersionInfo(void) {
+	uint8_t data[USBD_CUSTOMHID_OUTREPORT_BUF_SIZE] = {0};
+	uint8_t i = 0;
+	data[0] = COMMAND_VERSION;
+	while( Version[i] != '\0') {
+		data[i + 1] = (uint8_t) Version[i];
+		i++;
+	}
+	AddUsbTxBuffer(data);
+}
+
+void Send_CAN_BTR(CAN_HandleTypeDef *hcan) {
+	uint8_t data[USBD_CUSTOMHID_OUTREPORT_BUF_SIZE] = {0};
+	uint32_t btrValue = READ_REG(hcan->Instance->BTR);
+
+	data[0] = COMMAND_CAN_BTR;
+	data[1] = btrValue >> 24 & 0xFF;
+	data[2] = btrValue >> 16 & 0xFF;
+	data[3] = btrValue >> 8 & 0xFF;
+	data[4] = btrValue & 0xFF;
+	AddUsbTxBuffer(data);
 }
 
 /*

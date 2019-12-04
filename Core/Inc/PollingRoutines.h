@@ -13,6 +13,10 @@ void HelloFromFreeRTOS(void);
 
 int CheckButtonUser(void);
 
+void SendHardwareInfo(void);
+void SendVersionInfo(void);
+void Send_CAN_BTR(CAN_HandleTypeDef *hcan);
+
 void ParseUsbRec(void);
 void ParseCanRec(void);
 
