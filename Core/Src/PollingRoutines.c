@@ -60,15 +60,27 @@ int CheckButtonUser(void) {
  */
 void ParseUsbRec(void) {
 	uint8_t usbData[USBD_CUSTOMHID_OUTREPORT_BUF_SIZE];
-
 	if(UsbDataAvailable(usbData)) {
+		uint8_t node = GetNode(usbData);
 		switch(usbData[0])
 		{
 		case COMMAND_MESSAGE:
-			ConvertUsbDataToCanData(usbData);
+			switch(node) {
+			case CAN1_NODE:
+				SendUsbDataToCanBus(CAN1_NODE, usbData);
+				break;
+			case CAN2_NODE:
+				break;
+			}
 			break;
 		case COMMAND_BAUD:
-			CanSnifferCanInit(&hcan1, usbData);
+			switch(usbData[5]) { // index 5 is node
+			case CAN1_NODE:
+				CanSnifferCanInit(&hcan1, usbData);
+				break;
+			case CAN2_NODE:
+				break;
+			}
 			break;
 		case COMMAND_CAN_MODE:
 
@@ -77,7 +89,13 @@ void ParseUsbRec(void) {
 			// todo - report fw version, hardware type
 			SendHardwareInfo();
 			SendVersionInfo();
-			Send_CAN_BTR(&hcan1);
+			switch(node) {
+			case CAN1_NODE:
+				Send_CAN_BTR(&hcan1);
+				break;
+			case CAN2_NODE:
+				break;
+			}
 			break;
 		}
 	}
@@ -133,11 +151,9 @@ void ParseCanRec(void) {
 	canMsgAvailableFlag = Can1DataAvailable(&canRxMsg); // check ring buffer for new message
 	if(canMsgAvailableFlag) {
 		if(canRxMsg.CAN_RxHeaderTypeDef.IDE == CAN_EXT_ID) { // EXT ID
-			ConvertCanDataToUsbData(usbData, &canRxMsg);
-			AddUsbTxBuffer(usbData);
+			SendCanDataToUsb(&canRxMsg);
 		} else { // STD ID
-			ConvertCanDataToUsbData(usbData, &canRxMsg);
-			AddUsbTxBuffer(usbData);
+			SendCanDataToUsb(&canRxMsg);
 		}
 	}
 }
@@ -173,28 +189,6 @@ void SendCanToUart(CanTxMsgTypeDef *msg)
 	if(written == -1) return;
 
 	//HAL_UART_Transmit_IT(&huart2, &buf, sizeof(written) );
-}
-
-/*
- * function: .
- * input: the CAN message
- * output: none
- *
- */
-void SendUsbMsgToCan(CanTxMsgTypeDef *msg) {
-	CanTxMsgTypeDef canTxMsg;
-
-	canTxMsg.CAN_TxHeaderTypeDef.DLC = msg->CAN_TxHeaderTypeDef.DLC;
-	canTxMsg.CAN_TxHeaderTypeDef.StdId = msg->CAN_TxHeaderTypeDef.StdId;
-	canTxMsg.CAN_TxHeaderTypeDef.ExtId = msg->CAN_TxHeaderTypeDef.ExtId;
-	canTxMsg.CAN_TxHeaderTypeDef.IDE = msg->CAN_TxHeaderTypeDef.IDE;
-	canTxMsg.CAN_TxHeaderTypeDef.RTR = msg->CAN_TxHeaderTypeDef.RTR;
-
-	for(int i = 0; i < 8; i++){
-		canTxMsg.Data[i] = msg->Data[i];
-	}
-
-	AddCanTxBuffer1(&canTxMsg);
 }
 
 /*

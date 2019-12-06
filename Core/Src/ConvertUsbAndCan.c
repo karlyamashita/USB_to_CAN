@@ -1,99 +1,83 @@
 #include "main.h"
 #include "ConvertUsbAndCan.h"
 #include "CAN_Buffer.h"
+#include "USB_Buffer.h"
 #include "protocolCommands.h"
 
-/*
- USB data format
-
- // CAN Type ExID = 4, StdID = 0
-	tmp_buf[0] = EXT_ID;
-
-	// Arb ID 29/11 bit
-	tmp_buf[1] = 0x01; MSB
-	tmp_buf[2] = 0x01;
-	tmp_buf[3] = 0x01;
-	tmp_buf[4] = 0x01; LSB
-
-	tmp_buf[5] = 0x00; // RTR
-
-	//DLC
-	tmp_buf[6] = 8;
-
-	// data bytes
-	tmp_buf[7] = 0x01;
-	tmp_buf[8] = 0x0A;
-	tmp_buf[9] = 0x00;
-	tmp_buf[10] = 0x0C;
-	tmp_buf[11] = 0x00;
-	tmp_buf[12] = 0x4D;
-	tmp_buf[13] = 0x00;
-	tmp_buf[14] = 0x11;
+#include "usbd_conf.h" // path to USBD_CUSTOMHID_OUTREPORT_BUF_SIZE define
 
 
-	// time stamp. When sending msg to PC
-	tmp_buf[15] MSB
-	tmp_buf[16]
-	tmp_buf[17]
-	tmp_buf[18] LSB
-
- */
-
-
-/* Description: parse usb data and populate msg in correct CAN format
- * Input msg: pointer to array to save data in CAN format
+/* Description: parse usb data
+ * Input canChannel: which CAN node to send message to
  * Input data: The USB data
  * Output none
  */
-void ConvertUsbDataToCanData(uint8_t *data) {
+void SendUsbDataToCanBus(uint8_t canChannel, uint8_t *data) {
 
 	CanTxMsgTypeDef msg;
+	UsbCanStruct usbCanStruct;
+
+	memcpy(usbCanStruct.array.msgArray, data, 20); // remove command
+
+
 	// data[0] is command from USB
-	msg.CAN_TxHeaderTypeDef.IDE = data[1];
-	if(data[1] == CAN_ID_STD) {
-		msg.CAN_TxHeaderTypeDef.StdId = ( (data[4] <<8) | data[5]) & 0x000007FF;
+	msg.CAN_TxHeaderTypeDef.IDE = usbCanStruct.msgBytes.IDE;
+	if(msg.CAN_TxHeaderTypeDef.IDE == CAN_ID_STD) {
+		msg.CAN_TxHeaderTypeDef.StdId = usbCanStruct.msgBytes.ArbId;
 	} else {
-		msg.CAN_TxHeaderTypeDef.ExtId = ( (data[2] << 24) | (data[3] << 16) | (data[4] <<8) | data[5]) & 0x1FFFFFFF;// data[2] is MSB and data[5] is LSB
+		msg.CAN_TxHeaderTypeDef.ExtId = usbCanStruct.msgBytes.ArbId;
 	}
-	msg.CAN_TxHeaderTypeDef.RTR = data[6];// RTR
-	msg.CAN_TxHeaderTypeDef.DLC = data[7];//
+	msg.CAN_TxHeaderTypeDef.RTR = usbCanStruct.msgBytes.RTR;// RTR
+	msg.CAN_TxHeaderTypeDef.DLC = usbCanStruct.msgBytes.DLC;//
 
 	for(int i = 0; i < 8; i++) { // copy 8 bytes even though DLC could be less
-		msg.Data[i] = data[8 + i]; // index 8
+		msg.Data[i] = usbCanStruct.dataBytes.array[i];
 	}
 
-	AddCanTxBuffer1(&msg);
+	if(canChannel == CAN1_NODE) {
+		AddCanTxBuffer1(&msg);
+	} else {
+#ifdef USE_CAN_BUFFER_2
+		AddCanTxBuffer2(&msg);
+#endif
+	}
 }
 
 // just the opposite, copy CAN to USB data
-void ConvertCanDataToUsbData(uint8_t *data, CanRxMsgTypeDef *msg) {
+void SendCanDataToUsb(CanRxMsgTypeDef *msg) {
 	uint8_t i = 0;
-	data[0] = COMMAND_MESSAGE;
-	data[1] = msg->CAN_RxHeaderTypeDef.IDE;
+	UsbCanStruct usbCanStruct = {0};
 
-	if(data[1] == CAN_EXT_ID) {
-		data[2] = msg->CAN_RxHeaderTypeDef.ExtId >> 24 & 0xFF;
-		data[3] = msg->CAN_RxHeaderTypeDef.ExtId >> 16 & 0xFF;
-		data[4] = msg->CAN_RxHeaderTypeDef.ExtId >> 8 & 0xFF;
-		data[5] = msg->CAN_RxHeaderTypeDef.ExtId & 0xFF;
+
+	usbCanStruct.msgBytes.Command = COMMAND_MESSAGE;
+	usbCanStruct.msgBytes.IDE = msg->CAN_RxHeaderTypeDef.IDE & 0x0F;
+
+	if(usbCanStruct.msgBytes.IDE == CAN_EXT_ID) {
+		usbCanStruct.msgBytes.ArbId = msg->CAN_RxHeaderTypeDef.ExtId;
 	} else {
-		data[2] = msg->CAN_RxHeaderTypeDef.StdId >> 24 & 0xFF;
-		data[3] = msg->CAN_RxHeaderTypeDef.StdId >> 16 & 0xFF;
-		data[4] = msg->CAN_RxHeaderTypeDef.StdId >> 8 & 0xFF;
-		data[5] = msg->CAN_RxHeaderTypeDef.StdId & 0xFF;
+		usbCanStruct.msgBytes.ArbId = msg->CAN_RxHeaderTypeDef.StdId;
 	}
 
-	data[6] = msg->CAN_RxHeaderTypeDef.RTR;
-	data[7] = msg->CAN_RxHeaderTypeDef.DLC;
+	usbCanStruct.msgBytes.RTR = msg->CAN_RxHeaderTypeDef.RTR & 0x0F;
+	usbCanStruct.msgBytes.DLC = msg->CAN_RxHeaderTypeDef.DLC & 0x0F;
 
 	for(i = 0; i < 8; i++) {
-		data[8+i] = msg->Data[i];
+		usbCanStruct.dataBytes.array[i] = msg->Data[i];
 	}
 
-	// time stamp
-	//data[15] = msg->CAN_RxHeaderTypeDef.Timestamp >> 24 & 0xFF;
-	//data[16] = msg->CAN_RxHeaderTypeDef.Timestamp >> 16 & 0xFF;
-	//data[17] = msg->CAN_RxHeaderTypeDef.Timestamp >> 8 & 0xFF;
-	//data[18] = msg->CAN_RxHeaderTypeDef.Timestamp & 0xFF;
+	AddUsbTxBuffer(usbCanStruct.array.msgArray);
+}
 
+/*
+ * function: get the node PC wants to send message to. This can be CAN1, CAN2, SWCAN, etc.
+ * input: the USB data that has the node value
+ * output: node value
+ */
+uint8_t GetNode(uint8_t *data) {
+	uint8_t node;
+	UsbCanStruct usbCanStruct = {0};
+	memcpy(usbCanStruct.array.msgArray, data, 20); // remove command
+
+	node = usbCanStruct.msgBytes.Node;
+	return node;
 }

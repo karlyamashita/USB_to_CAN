@@ -26,5 +26,4 @@ void SendCanToUart(CanTxMsgTypeDef *msg);
 void CanSnifferCanInit(CAN_HandleTypeDef *hcan, uint8_t *data);
 
 
-
 #endif // POLLING_ROUTINE_H
