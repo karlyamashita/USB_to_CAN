@@ -71,6 +71,18 @@ void ParseUsbRec(void) {
 				break;
 			case CAN2_NODE:
 				break;
+			case SWCAN1_NODE:
+				break;
+			case LSFTCAN1_NODE:
+				break;
+			case LIN1_NODE:
+				break;
+			case ETH1_NODE:
+				break;
+			case SWCAN2_NODE:
+				break;
+			case LSFTCAN2_NODE:
+				break;
 			}
 			break;
 		case COMMAND_BAUD:
@@ -82,11 +94,9 @@ void ParseUsbRec(void) {
 				break;
 			}
 			break;
-		case COMMAND_CAN_MODE:
-
+		case COMMAND_CAN_MODE: // normal, listen, loopback
 			break;
 		case COMMAND_INFO:
-			// todo - report fw version, hardware type
 			SendHardwareInfo();
 			SendVersionInfo();
 			switch(node) {
@@ -242,5 +252,13 @@ void CanSnifferCanInit(CAN_HandleTypeDef *hcan, uint8_t *data) {
 
 	usbData[0] = COMMAND_ACK; // ACK PC back
 	AddUsbTxBuffer(usbData);
+}
+
+// todo - send PC error message. Maybe send as special command instead of in CAN message.
+void HAL_CAN_ErrorCallback(CAN_HandleTypeDef *hcan)
+{
+	if(hcan->ErrorCode != HAL_CAN_ERROR_NONE) {
+
+	}
 }
 
