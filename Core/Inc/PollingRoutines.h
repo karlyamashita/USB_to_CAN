@@ -24,6 +24,7 @@ void SendUsbMsgToCan(CanTxMsgTypeDef *msg);
 void SendCanToUart(CanTxMsgTypeDef *msg);
 
 void CanSnifferCanInit(CAN_HandleTypeDef *hcan, uint8_t *data);
-
+void CanBusActivityStatus(uint8_t status);
+uint8_t GetCanBusActive(void);
 
 #endif // POLLING_ROUTINE_H

@@ -29,7 +29,7 @@
 #include "CAN_buffer.h"
 #include "USB_buffer.h"
 #include "PollingRoutines.h"
-
+#include "GPIO_Ports.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -436,6 +436,13 @@ void StartDefaultTask(void const * argument)
   for(;;)
   {
 	  PollingRoutine();
+	  if(GetCanBusActive() == 1) {
+		  CanBusActivityStatus(0);
+		  PortD_On(LD4_Pin);
+		  osDelay(300);
+		  PortD_Off(LD4_Pin);
+		  osDelay(1000);
+	  }
     osDelay(1);
   }
   /* USER CODE END 5 */ 
@@ -548,7 +555,7 @@ void StartTaskSendCan(void const * argument)
   /* Infinite loop */
   for(;;)
   {
-	  SendCanTxMessage1(); // checks to see if there is a message to send
+	  SendCanTxMessage1(&hcan1); // checks to see if there is a message to send
     osDelay(1);
   }
   /* USER CODE END StartTaskSendCan */
